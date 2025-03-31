@@ -1,25 +1,47 @@
-import Card from "./Card"
+import InfoContainer from "./InfoContainer"
 import InvestmentType from "./FilterComponents/InvestmentType";
 import SubscriptionType from "./FilterComponents/SubscriptionType"
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import Volatality from "./FilterComponents/Volatality";
 import LaunchDate from "./FilterComponents/LaunchDate";
 import InvestmentStrategy from "./FilterComponents/InvestmentStrategy";
+import Navbar from "./Navbar";
+import AddClearFilter from "./FilterComponents/AddClearFilter";
 
-function MainBody({ smallcaseData }) {
+function MainBody() {
 
   let initialFilters = {
 
-    subscriptionType: 'ShowAll',
+    subscriptionType: 'Show All',
     investmentAmount: 'Any',
-    volatality:new Set(),
-    investStrategy:new Set()
+    volatality: new Set(),
+    investStrategy: new Set(),
+    launchDate: false,
+    popularity: null,
+    perMonthYear: null,
+    orderBy: 'High-Low'
 
   }
   const [filters, setFilters] = useState(initialFilters);
-console.log(filters)
+  const [smallcaseData, setSmallCaseData] = useState([])
 
-  function handleClickSubscription(type) {
+  useEffect(() => {
+    let fetchData = async () => {
+      try {
+        let response = await fetch('/jsonFile/smallcases.json')
+        let smallData = await response.json()
+        setSmallCaseData(smallData.data)
+      } catch (error) {
+        console.log('Error Fetching Data')
+      }
+    }
+
+    fetchData()
+
+  }, [])
+
+
+  function handleChangeSubscription(type) {
     setFilters((prev) => ({ ...prev, subscriptionType: type }));
   }
 
@@ -27,14 +49,14 @@ console.log(filters)
     setFilters((prev) => ({ ...prev, investmentAmount: type }));
   }
 
-  function handleClickVolatality(type){
-    setFilters((prev)=>{
+  function handleChangeVolatality(type) {
+    setFilters((prev) => {
 
-      let updatedVolatality =  new Set(prev.volatality)
-      
-      if(updatedVolatality.has(type)){
+      let updatedVolatality = new Set(prev.volatality)
+
+      if (updatedVolatality.has(type)) {
         updatedVolatality.delete(type)
-      }else{
+      } else {
         updatedVolatality.add(type)
       }
 
@@ -42,73 +64,170 @@ console.log(filters)
     })
   }
 
+  function handleChangeStrategy(type) {
+    setFilters((prev) => {
+      let updatedStragtegy = new Set(prev.investStrategy)
 
-  function getFilteredData(data, filters) {
-    let filteredData = [...data];
-
-    //  subscription type filter
-    if (filters.subscriptionType == "Free Access") {
-      filteredData = data.filter((ele) => {
-        let subscriptionTypeIsPrivate = ele.flags.private;
-        return !subscriptionTypeIsPrivate;
-      });
-    } else if (filters.subscriptionType == "Fee Based") {
-      filteredData = data.filter((ele) => {
-        let subscriptionTypeIsPrivate = ele.flags.private;
-        return subscriptionTypeIsPrivate;
-      });
-    } else if (filters.subscriptionType == "Show All") {
-      filteredData = [...data];
-    }
-
-    //  investment amount filter
-    if (filters.investmentAmount == "Any") {
-      filteredData = [...filteredData];
-    } else {
-      let amountFilter = filters.investmentAmount.split("₹")[1]; 
-      if (amountFilter) {
-        let numericAmount = parseInt(amountFilter.split(",").join(""), 10); 
-        filteredData = filteredData.filter((item) => item.stats.minInvestAmount < numericAmount);
+      if (updatedStragtegy.has(type)) {
+        updatedStragtegy.delete(type)
+      } else {
+        updatedStragtegy.add(type)
       }
-    }
-     //volatality filter
-    if (filters.volatality.size > 0) { 
-      filteredData = filteredData.filter((items) => {
-        let volatility = items.stats.ratios.riskLabel; 
-
-        return filters.volatality.has(volatility.split(' ')[0]); 
-      });
-    }
-    //investment strategey
-
-
-    return filteredData;
+      return { ...prev, investStrategy: updatedStragtegy }
+    })
   }
 
+  function handleLaunchChange() {
+    setFilters((prev) => ({ ...prev, launchDate: !prev.launchDate }));
+  }
+
+  function handleChangePopularity(type) {
+    setFilters((prev) => ({ ...prev, popularity: type, perMonthYear: null }));
+  }
+
+  function handleChangeYears(type) {
+    setFilters((prev) => {
+      return { ...prev, perMonthYear: type, popularity: null }
+    })
+  }
+  function handleChangeOrder(orderType) {
+    setFilters((prev) => ({ ...prev, orderBy: orderType }));
+  }
+
+
+  function getFilteredData(data, filters) {
+    const { subscriptionType, investmentAmount, volatality, launchDate, investStrategy } = filters;
+
+    return data.filter(item => {
+      const flags = item.flags;
+      const stats = item.stats;
+      const info = item.info;
+      const isPrivate = flags.private;
+
+      if (subscriptionType !== "Show All") {
+        if (subscriptionType === "Free Access" && isPrivate) return false;
+        if (subscriptionType === "Fee Based" && !isPrivate) return false;
+      }
+
+      if (investmentAmount !== "Any") {
+        let amountString = investmentAmount.split("₹")[1].split(",").join("");
+        let numericAmount = parseInt(amountString, 10);
+        if (stats.minInvestAmount > numericAmount) return false;
+      }
+
+      if (volatality.size > 0) {
+        let riskLabel = stats.ratios.riskLabel.split(' ')[0];
+        if (!volatality.has(riskLabel)) return false;
+      }
+
+      if (launchDate) {
+        let currentYear = new Date().getFullYear();
+        let launchYear = new Date(info.created).getFullYear();
+        if ((currentYear - launchYear) < 6) return false;
+      }
+
+      if (investStrategy.size > 0) {
+        let hasStrategy = info.investmentStrategy.some((item) => investStrategy.has(item.displayName));
+        if (!hasStrategy) return false;
+      }
+
+      return true;
+    });
+  }
+
+  function getSortedData(filteredData, filters) {
+    const sortFunctions = {
+      'Popularity': (a, b) =>
+        a.brokerMeta.flags.popular - b.brokerMeta.flags.popular,
+      "Minimum Amount": (a, b) =>
+        a.stats.minInvestAmount - b.stats.minInvestAmount,
+      "Recently Rebalanced": (a, b) =>
+        new Date(b.info.lastRebalanced) - new Date(a.info.lastRebalanced),
+    };
+  
+   
+    if (filters.popularity in sortFunctions) {
+      return [...filteredData].sort(sortFunctions[filters.popularity]);
+    } else {
+      // Sorting by Return Duration
+      const returnKeyMap = {
+        "1M": "monthly",
+        "6M": "halfyearly",
+        "1Y": "yearly",
+        "3Y": "threeYear",
+        "5Y": "fiveYear",
+      };
+    
+      const returnKey = returnKeyMap[filters.perMonthYear];
+    
+      if (!returnKey) {
+        return [...filteredData]; 
+      }
+    
+      return [...filteredData].sort((a, b) => {
+        const valueA = (a.stats.returns?.[returnKey] ?? 0) * 100;
+        const valueB = (b.stats.returns?.[returnKey] ?? 0) * 100;
+    
+        return filters.orderBy === "High-Low" ? valueB - valueA : valueA - valueB;
+      });
+    }    
+  }
+  
+
   const filteredData = getFilteredData(smallcaseData, filters);
+  const sortedData = getSortedData(filteredData, filters);
+
+
+  //For Counting Filters
+  const selectedFiltersCount =
+    (filters.subscriptionType !== "Show All" ? 1 : 0) +
+    (filters.investmentAmount !== "Any" ? 1 : 0) +
+    filters.volatality.size +
+    (filters.launchDate ? 1 : 0) +
+    filters.investStrategy.size;
+
+  //For Clear All Filters
+  const handleClearFilters = () => {
+    setFilters(initialFilters);
+  };
 
   return (
     <div>
+      <Navbar
+        handleChangePopularity={handleChangePopularity}
+        handleChangeYears={handleChangeYears}
+        handleChangeOrder={handleChangeOrder}
+        perMonthYear={filters.perMonthYear}
+        orderBy={filters.orderBy}
+      />
+
       <div className='grid grid-cols-[1fr,2fr] pl-32 pr-32'>
 
-        <div>
-          <div className='flex border-2 justify-between items-center  p-2 border-black'>
-            <div className='text-sm pl-4 font-medium'>Filters</div>
-            <div className='text-sm pr-4 font-medium text-blue-600 underline'>Clear All</div>
-          </div>
-          <SubscriptionType handleClickSubscription={handleClickSubscription} />
-          <InvestmentType handleChangeInvestmentType={handleChangeInvestmentType} />
-          <Volatality handleClickVolatality={handleClickVolatality}/>
-          <LaunchDate/>
-          <InvestmentStrategy/>
+        <div className="pl-32 pr-10">
+
+          <AddClearFilter handleClearFilters={handleClearFilters} selectedFiltersCount={selectedFiltersCount} />
+
+          <SubscriptionType handleChangeSubscription={handleChangeSubscription} selectedSubscription={filters.subscriptionType} />
+
+          <InvestmentType handleChangeInvestmentType={handleChangeInvestmentType} selectedInvestment={filters.investmentAmount} />
+
+          <Volatality handleChangeVolatality={handleChangeVolatality} selectedVolatality={filters.volatality} />
+
+          <LaunchDate handleLaunchChange={handleLaunchChange} isLaunchDate={filters.launchDate} />
+
+          <InvestmentStrategy handleChangeStrategy={handleChangeStrategy} selectedInvestStrategy={filters.investStrategy} />
+
         </div>
         <div>
+
           <div>
-            {filteredData.map((cardInfo, index) => (
-              <Card smallcaseData={smallcaseData} cardInfo={cardInfo} key={index} />
+            {sortedData.map((cardInfo, index) => (
+              <InfoContainer smallcaseData={smallcaseData} cardInfo={cardInfo} key={index} selectedSubscription={filters.subscriptionType} />
             ))}
           </div>
+
         </div>
+
       </div>
     </div>
   )
