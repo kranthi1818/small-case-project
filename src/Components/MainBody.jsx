@@ -162,14 +162,17 @@ function MainBody() {
     
       if (!returnKey) {
         return [...filteredData]; 
+      }else{
+        
+        return [...filteredData].sort((a, b) => {
+          const valueA = (a.stats.returns[returnKey] ?? 0) * 100;
+          const valueB = (b.stats.returns[returnKey] ?? 0) * 100;
+      
+          return filters.orderBy === "High-Low" ? valueB - valueA : valueA - valueB;
+        });
       }
     
-      return [...filteredData].sort((a, b) => {
-        const valueA = (a.stats.returns?.[returnKey] ?? 0) * 100;
-        const valueB = (b.stats.returns?.[returnKey] ?? 0) * 100;
-    
-        return filters.orderBy === "High-Low" ? valueB - valueA : valueA - valueB;
-      });
+      
     }    
   }
   
