@@ -170,9 +170,7 @@ function MainBody() {
       
           return filters.orderBy === "High-Low" ? valueB - valueA : valueA - valueB;
         });
-      }
-    
-      
+      }  
     }    
   }
   

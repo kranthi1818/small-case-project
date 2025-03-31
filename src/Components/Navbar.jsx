@@ -56,8 +56,6 @@ function Navbar({ handleChangePopularity, handleChangeYears, handleChangeOrder, 
                                 ))}
                             </div>
 
-
-
                             <div className={`text-gray-600 text-sm mb-1 ${perMonthYear !== null ? "block" : "hidden"}`}>
                                 Order by
                             </div>
